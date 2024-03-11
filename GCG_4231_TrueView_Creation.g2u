@@ -1,0 +1,350 @@
+Program.Sub.ScreenSU.Start
+
+Program.Sub.ScreenSU.End
+
+Program.Sub.Preflight.Start
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+F.Intrinsic.Control.SetErrorHandler("Main_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+v.Local.sSQL.Declare(string)
+v.Local.sFileName.Declare(string)
+v.Local.iCount.Declare(long)
+v.Local.sValue.Declare(string)
+v.Local.iSleep.Declare(long)
+v.Local.sRet.Declare(string)
+v.Local.iHour.Declare(long)
+V.Local.fAvg_Rate.Declare(Float)
+
+f.ODBC.Connection!Con.OpenConnection(v.Ambient.PDSN,v.Ambient.PUser,v.Ambient.PPass)
+
+'We need to get the sleep time and set it for our sleep timer
+'F.ODBC.Connection!Con.ExecuteAndReturn("SELECT SLEEP_TIMER FROM GCG_4231_MAINT WHERE TYPE_ID = 'H'",V.Local.sRet)
+'f.Intrinsic.String.Replace(v.Local.sRet,"*!*","",v.Local.sRet)
+'f.Intrinsic.Control.If(v.Local.sRet,=,"")
+'	v.Local.iSleep.Set(2)
+'f.Intrinsic.Control.Else
+'	v.Local.iSleep.Set(v.Local.sRet)
+'f.Intrinsic.Control.EndIf
+'f.Intrinsic.Math.Mult(v.Local.iSleep,60,v.Local.iSleep)
+
+'Now we need to let this loop until it is time to stop
+'f.Intrinsic.Control.Do
+
+	'We are going to use our custom table GCG_4231_TRUEVIEW to pull data and format it for HTML
+	f.Intrinsic.Control.CallSub(timecheck)
+	'Pull all of GCG_4231_TRUEVIEW into a DataTable
+	f.Data.DataTable.CreateFromSQL("TrueView","Con","SELECT RTRIM(DEPARTMENT) AS DEPARTMENT, RTRIM(WORKCENTER) AS WORKCENTER, RTRIM(JOBSUFFIX) AS JOBSUFFIX, RTRIM(PART) AS PART, RTRIM(SEQ) AS SEQ, RTRIM(DESCRIPTION) AS DESCRIPTION, EST_RATE, ACT_RATE, AVG_RATE as AVG_RATE_FLOAT, '' as AVG_RATE FROM GCG_4231_TRUEVIEW ORDER BY DEPARTMENT, WORKCENTER",True)
+	
+	'Loop through the data table and set the department value with the table color
+	f.Intrinsic.Control.For(v.Local.iCount,0,v.DataTable.TrueView.RowCount--,1)
+		f.Intrinsic.Control.If(v.DataTable.TrueView(v.Local.iCount).Est_Rate!FieldVal,<,v.DataTable.TrueView(v.Local.iCount).Act_Rate!FieldVal)
+			'We need to set the row to Green
+			f.Intrinsic.String.Build("<td class="green-cells">{0}",v.DataTable.TrueView(v.Local.iCount).Department!FieldVal,v.Local.sValue)
+			f.Data.DataTable.SetValue("TrueView",v.Local.iCount,"Department",v.Local.sValue)
+		f.Intrinsic.Control.ElseIf(v.DataTable.TrueView(v.Local.iCount).Est_Rate!FieldVal,=,v.DataTable.TrueView(v.Local.iCount).Act_Rate!FieldVal)
+			'We need to set the row to Tan
+			f.Intrinsic.String.Build("<td class="tan-cells">{0}",v.DataTable.TrueView(v.Local.iCount).Department!FieldVal,v.Local.sValue)
+			f.Data.DataTable.SetValue("TrueView",v.Local.iCount,"Department",v.Local.sValue)
+		f.Intrinsic.Control.ElseIf(v.DataTable.TrueView(v.Local.iCount).Est_Rate!FieldVal,>,v.DataTable.TrueView(v.Local.iCount).Act_Rate!FieldVal)
+			'We need to set the row to Red
+			f.Intrinsic.String.Build("<td class="red-cells">{0}",v.DataTable.TrueView(v.Local.iCount).Department!FieldVal,v.Local.sValue)
+			f.Data.DataTable.SetValue("TrueView",v.Local.iCount,"Department",v.Local.sValue)
+		f.Intrinsic.Control.EndIf
+		
+		V.Local.fAvg_Rate.Set(V.DataTable.TrueView(V.Local.iCount).Avg_Rate_Float!FieldVal)
+		F.Intrinsic.Control.If(V.DataTable.TrueView(V.Local.iCount).Est_Rate!FieldVal,<,V.Local.fAvg_Rate)
+			'Set the Avg Rate cell to green
+			f.Intrinsic.String.Build("<td class="light-green-cells">{0}",V.Local.fAvg_Rate.String,v.Local.sValue)
+			f.Data.DataTable.SetValue("TrueView",v.Local.iCount,"Avg_Rate",v.Local.sValue)
+		F.Intrinsic.Control.ElseIf(V.DataTable.TrueView(V.Local.iCount).Est_Rate!FieldVal,=,V.Local.fAvg_Rate)
+			'Set the Avg Rate cell to yellow
+			f.Intrinsic.String.Build("<td class="light-tan-cells">{0}",V.Local.fAvg_Rate.String,v.Local.sValue)
+			f.Data.DataTable.SetValue("TrueView",v.Local.iCount,"Avg_Rate",v.Local.sValue)
+		F.Intrinsic.Control.ElseIf(V.DataTable.TrueView(V.Local.iCount).Est_Rate!FieldVal,>,V.Local.fAvg_Rate)
+			'Set the Avg Rate cell to red
+			f.Intrinsic.String.Build("<td class="light-red-cells">{0}",V.Local.fAvg_Rate.String,v.Local.sValue)
+			f.Data.DataTable.SetValue("TrueView",v.Local.iCount,"Avg_Rate",v.Local.sValue)
+		F.Intrinsic.Control.EndIf
+	f.Intrinsic.Control.Next(v.Local.iCount)
+	'Drop the float column for Avg Rate
+	F.Data.DataTable.RemoveColumn("TrueView","AVG_RATE_FLOAT")
+	'Edit the DataTable HTML
+	f.Intrinsic.Control.CallSub(edithtml)
+	'We need to add the table into the Template and sleep timer
+	f.Intrinsic.Control.CallSub(htmlfromtemplate,"TABLE",v.Args.TABLE)
+	
+	f.Data.DataTable.Close("TrueView")
+	'see if it is > 11 pm. if not then sleep else close
+'	f.Intrinsic.Date.Hour(v.Ambient.Now.TimeComp,v.Local.iHour)
+'	f.Intrinsic.Control.If(v.Local.iHour,>=,23)
+		f.Intrinsic.Control.CallSub(unload)
+'	f.Intrinsic.Control.Else
+'		f.Intrinsic.UI.Sleep(v.Local.iSleep)
+'	f.Intrinsic.Control.EndIf
+'f.Intrinsic.Control.Loop
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("Main_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_4231_TrueView_Creation.g2u",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	f.Intrinsic.Debug.SetLA(v.Local.sError)
+'	f.Intrinsic.UI.Msgbox(v.Local.sError)
+	f.Intrinsic.Control.CallSub(unload)
+Function.Intrinsic.Control.EndIf
+
+
+Program.Sub.Main.End
+
+Program.Sub.Unload.Start
+F.Intrinsic.Control.SetErrorHandler("Unload_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+
+f.ODBC.Connection!Con.Close
+f.Intrinsic.Control.End
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("Unload_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_4231_TrueView_Creation.g2u",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	f.Intrinsic.Debug.SetLA(v.Local.sError)
+'	f.Intrinsic.UI.Msgbox(v.Local.sError)
+	f.Intrinsic.Control.End
+
+Function.Intrinsic.Control.EndIf
+
+
+Program.Sub.Unload.End
+
+Program.Sub.EditHTML.Start
+F.Intrinsic.Control.SetErrorHandler("EditHTML_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+v.Local.sFile.Declare(string)
+v.Local.sLine.Declare(string)
+v.Local.sTable.Declare(string)
+v.Local.sFilter.Declare(string)
+
+'Get the data populated in the HTML
+f.Data.DataTable.ExportHTML("TrueView","","","TFtable",True,v.Local.sFile)
+
+'We need to replae ID with Class
+f.Intrinsic.String.Replace(v.Local.sFile,"id=","class=",v.Local.sFile)
+'We need to delete the extra TD from the colored rows
+f.Intrinsic.String.Replace(v.Local.sFile,"<td><td","<td",v.Local.sFile)
+'Add in all the classes for Data Cells
+f.Intrinsic.String.Replace(v.Local.sFile,"<td>","<td class="data-cell">",v.Local.sFile)
+'Add the empty first column
+f.Intrinsic.String.Replace(v.Local.sFile,"<tr>","<tr><td class="Empty">&nbsp;</td>",v.Local.sFile)
+'Add in the Last empty column
+f.Intrinsic.String.Replace(v.Local.sFile,"</tr>","<td class="Last">&nbsp;</td></tr>",v.Local.sFile)
+
+
+
+
+
+'We only have the table now so send it back
+f.Intrinsic.Variable.AddRV("TABLE",v.Local.sFile)
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("EditHTML_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_4231_TrueView_Creation.g2u",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	f.Intrinsic.Debug.SetLA(v.Local.sError)
+'	f.Intrinsic.UI.Msgbox(v.Local.sError)
+	f.Intrinsic.Control.CallSub(unload)
+Function.Intrinsic.Control.EndIf
+
+
+Program.Sub.EditHTML.End
+
+Program.Sub.HTMLFromTemplate.Start
+F.Intrinsic.Control.SetErrorHandler("HTMLFromTemplate_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+v.Local.sTemplate.Declare(string)
+v.Local.iSleep.Declare(long)
+v.Local.sFile.Declare(string)
+v.Local.sLogo.Declare(string)
+
+'We need to grab the HTML Template
+f.Intrinsic.String.Build("{0}\GCG_4231_WIP_TEMPLATE.html",v.Caller.GasDir,v.Local.sFile)
+f.Intrinsic.File.File2String(v.Local.sFile,v.Local.sTemplate)
+
+'If we have a logo saved then replace the template one
+f.ODBC.Connection!Con.OpenLocalRecordsetRO("rstLogo","SELECT LOGO FROM GCG_4231_MAINT WHERE TYPE_ID = 'H'")
+f.Intrinsic.Control.If(v.ODBC.Con!rstLogo.EOF,=,False)
+	'We have a logo saved so replace the one on the Template
+	f.Intrinsic.String.Replace(v.ODBC.Con!rstLogo.FieldValTrim!LOGO,"\","/",V.Local.sLogo)
+	F.Intrinsic.String.Build("file:{0}",v.Local.sLogo,v.Local.sLogo)
+	f.Intrinsic.String.Replace(v.Local.sTemplate,"GCG_4231_GSS_Logo_Green.png",v.Local.sLogo,V.Local.sTemplate)
+f.Intrinsic.Control.EndIf
+f.ODBC.Con!rstLogo.Close
+
+'We need to Replace #sleep with the sleep timer
+f.ODBC.Connection!Con.OpenLocalRecordsetRO("rstSleep","SELECT SLEEP_TIMER FROM GCG_4231_MAINT WHERE TYPE_ID = 'H'")
+F.Intrinsic.Control.If(V.ODBC.Con!rstSleep.EOF,=,False)
+	'We have a sleep timer so we need to replace it in the file
+	f.Intrinsic.Math.Mult(v.ODBC.Con!rstSleep.FieldValLong!SLEEP_TIMER,60000,v.Local.iSleep)
+	f.Intrinsic.String.Replace(v.Local.sTemplate,"#sleep",v.Local.iSleep,v.Local.sTemplate)
+f.Intrinsic.Control.Else
+	'We for some reason don't have sleep saved in the table so set it to default 2 minutes
+	f.Intrinsic.String.Replace(v.Local.sTemplate,"#sleep",120000,v.Local.sTemplate)
+f.Intrinsic.Control.EndIf
+f.ODBC.Con!rstSleep.Close
+
+'We can replace the #table with our table
+f.Intrinsic.String.Replace(v.Local.sTemplate,"#table",v.Args.TABLE,v.Local.sTemplate)
+
+'We are all done editing the Template so we can now save it
+f.Intrinsic.String.Build("{0}\{1}_GCG_4231_TrueView_Est_VS_Act_Rate.html",v.Caller.GasDir,v.Caller.CompanyCode.trim,v.Local.sFile)
+f.Intrinsic.File.String2File(v.Local.sFile,v.Local.sTemplate)
+
+'If the switch is O then open the file
+f.Intrinsic.Control.If(v.Caller.Switches,=,"O")
+	F.Intrinsic.Task.ShellExec(V.Caller.Handle,"OPEN",V.Local.sFile,"","",1)
+	f.Intrinsic.Control.CallSub(unload)
+f.Intrinsic.Control.EndIf
+
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("HTMLFromTemplate_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_4231_TrueView_Creation.g2u",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	f.Intrinsic.Debug.SetLA(v.Local.sError)
+'	f.Intrinsic.UI.Msgbox(v.Local.sError)
+	f.Intrinsic.Control.CallSub(unload)
+Function.Intrinsic.Control.EndIf
+
+
+Program.Sub.HTMLFromTemplate.End
+
+Program.Sub.TimeCheck.Start
+F.Intrinsic.Control.SetErrorHandler("TimeCheck_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+v.Local.fTime.Declare(float)
+v.Local.sFilter.Declare(string)
+v.Local.dDate.Declare(date)
+v.Local.iCount.Declare(long)
+
+f.Data.DataTable.CreateFromSQL("Trueview","Con","SELECT RTRIM(DEPARTMENT) AS DEPARTMENT, RTRIM(WORKCENTER) AS WORKCENTER, RTRIM(JOBSUFFIX) AS JOBSUFFIX, RTRIM(PART) AS PART, RTRIM(SEQ) AS SEQ, RTRIM(DESCRIPTION) AS DESCRIPTION, EST_RATE, ACT_RATE, CURRENT_TIME, CURRENT_DATE FROM GCG_4231_TRUEVIEW", True)
+'We need to remove all rows that are older than 2 hours
+f.Intrinsic.Date.Hour(v.Ambient.Now,v.Local.fTime)
+f.Intrinsic.Date.Minute(v.Ambient.Now,v.Local.sFilter)
+f.Intrinsic.Math.Div(v.Local.sFilter.Float,60,v.Local.sFilter)
+f.Intrinsic.Math.Add(v.Local.fTime,v.Local.sFilter.Float,v.Local.fTime)
+F.Intrinsic.Math.Sub(V.Local.fTime,2,V.Local.fTime)
+f.Intrinsic.Control.If(v.Local.fTime,<,0)
+	f.Intrinsic.Date.DateAdd("D",-1,v.Ambient.Date,v.Local.dDate)
+	'We need to put the time back from 24
+	f.Intrinsic.Math.Add(24,v.Local.fTime,v.Local.fTime)
+	f.Intrinsic.String.Build("CURRENT_DATE = '{0}' AND CURRENT_TIME <= {1}",v.Local.dDate,v.Local.fTime,v.Local.sFilter)
+f.Intrinsic.Control.Else
+	f.Intrinsic.String.Build("CURRENT_DATE = '{0}' AND CURRENT_TIME <= {1}",v.Ambient.Date,v.Local.fTime,v.Local.sFilter)
+f.Intrinsic.Control.EndIf
+f.Data.DataView.Create("Trueview","TimeCheck",22,V.Local.sFilter,"")
+'If we have anything in the view then we need to loop through it and delete them.
+f.Intrinsic.Control.For(v.Local.iCount,v.DataView.Trueview!TimeCheck.RowCount--,0,-1)
+	'Delete the Row
+	f.Data.DataTable.DeleteRow("Trueview",v.DataView.Trueview!TimeCheck(v.Local.iCount).DataTableIndex)
+f.Intrinsic.Control.Next(v.Local.iCount)
+F.Data.DataView.Close("Trueview","TimeCheck")
+
+'Delete all rows that are from yesterday.
+f.Intrinsic.String.Build("CURRENT_DATE < '{0}'",V.Ambient.Date,V.Local.sFilter)
+f.Data.DataView.Create("Trueview","TimeCheck",22,V.Local.sFilter,"")
+'If we have anything in the view then we need to loop through it and delete them.
+f.Intrinsic.Control.For(v.Local.iCount,v.DataView.Trueview!TimeCheck.RowCount--,0,-1)
+	'Delete the Row
+	f.Data.DataTable.DeleteRow("Trueview",v.DataView.Trueview!TimeCheck(v.Local.iCount).DataTableIndex)
+f.Intrinsic.Control.Next(v.Local.iCount)
+F.Data.DataView.Close("Trueview","TimeCheck")
+
+f.Data.DataTable.SaveToDB("Trueview","Con","GCG_4231_TRUEVIEW","JOBSUFFIX*!*SEQ",7)
+f.Data.DataTable.Close("Trueview")
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("TimeCheck_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_4231_TrueView_Creation.g2u",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.Debug.SetLA(V.Local.sError)
+	f.Intrinsic.Control.CallSub(unload)
+Function.Intrinsic.Control.EndIf
+Program.Sub.TimeCheck.End
+
+Program.Sub.Comments.Start
+${$0$}$$}$SS1$}$12/6/2016 3:56:55 PM$}$False
+${$3$}$0$}$$}$0$}$-1$}$$}$12:00:00 AM$}$A GAB Script will be created that will compile a spreadsheet that contains Job Estimate, Re-Estimate, and Production information. 
+
+The GAB script will be setup to run nightly on the task scheduler. 
+Default Setup: 
+Frequency: Daily. 
+Start Time: 6:01 PM. 
+
+<I>GS Menu Mode</I> 
+
+A New Mode will also be added to the GAB script that allows the user to run this from a custom menu item within Global Shop Menu. 
+
+This mode will ask the user for a start date and end date. It will be used to pull jobs that have a due date within the specified range. 
+
+**Note: Processing time is dependent upon the length of the date range.
+
+
+The GAB script will compile all information for jobs that are due within the current year. 
+
+The spreadsheet will be saved in the Global\Busint\Export\JobReview directory. 
+
+The spreadsheet file name will be Job_Review_Report_MM_DD_YY.xlsx
+
+The spreadsheet will contain only 1 sheet.
+
+The Spreadsheet will contain the following Columns: 
+Job #
+Spiral/Rect
+Release 
+Job Name
+Job Location 
+Rep
+Rep Contact
+Estimate: 
+-Sales
+-Add/Deduct
+-LBS
+-Material
+-Labor
+-Hours
+-Freight
+RE-Estimate/PO
+-Sales
+-LBS
+-Material
+-Labor
+-Hours
+-Freight
+Material Type, Connections, Etc. 
+Fittings Heavy /Lite
+SW/DW
+Production:
+-Sales
+-LBS
+-Material
+-Labor
+-Hours
+-Freight Cost
+-Profit
+-Margin
+Program.Sub.Comments.End
