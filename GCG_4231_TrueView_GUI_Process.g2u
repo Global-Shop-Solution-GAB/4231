@@ -1,0 +1,822 @@
+﻿Program.Sub.ScreenSU.Start
+Gui.f_WCMaint..Create
+Gui.f_WCMaint..Caption("Workcenter TrueView Configuration")
+Gui.f_WCMaint..Size(5565,6150)
+Gui.f_WCMaint..MinX(0)
+Gui.f_WCMaint..MinY(0)
+Gui.f_WCMaint..Position(0,0)
+Gui.f_WCMaint..BackColor(-2147483633)
+Gui.f_WCMaint..MousePointer(0)
+Gui.f_WCMaint..Event(UnLoad,Unload)
+Gui.f_WCMaint.lbl1.Create(Label,"Logo(280px X 85px)",True,1680,255,0,105,135,True,0,"Arial",8,-2147483633,0)
+Gui.f_WCMaint.txtLogo.Create(TextBox,"",True,4095,300,0,105,345,False,0,"Arial",8,-2147483643,1)
+Gui.f_WCMaint.txtLogo.Locked(True)
+Gui.f_WCMaint.cmdLogoBrw.Create(Button)
+Gui.f_WCMaint.cmdLogoBrw.Size(510,375)
+Gui.f_WCMaint.cmdLogoBrw.Position(4305,315)
+Gui.f_WCMaint.cmdLogoBrw.Caption("^")
+Gui.f_WCMaint.cmdLogoBrw.Event(Click,cmdLogoBrw_Click)
+Gui.f_WCMaint.lbl2.Create(Label,"Sleep Time In Minutes",True,1800,255,0,105,765,True,0,"Arial",8,-2147483633,0)
+Gui.f_WCMaint.txtSleep.Create(TextBox,"",True,390,300,0,105,960,True,0,"Arial",8,-2147483643,1)
+Gui.f_WCMaint.txtSleep.NumericOnly(True)
+Gui.f_WCMaint.GSGCWC.Create(GsGridControl)
+Gui.f_WCMaint.GSGCWC.Size(5010,3705)
+Gui.f_WCMaint.GSGCWC.Position(105,1365)
+Gui.f_WCMaint.GSGCWC.Event(RowCellClick,GSGCWC_RowCellClick)
+Gui.f_WCMaint.GSGCWC.Event(CellValueChanged,GSGCWC_CellValueChanged)
+Gui.f_WCMaint.cmdSave.Create(Button)
+Gui.f_WCMaint.cmdSave.Size(855,375)
+Gui.f_WCMaint.cmdSave.Position(105,5235)
+Gui.f_WCMaint.cmdSave.Caption("Save")
+Gui.f_WCMaint.cmdSave.Event(Click,cmdSave_Click)
+Gui.f_WCMaint.cmdAdd.Create(Button)
+Gui.f_WCMaint.cmdAdd.Size(1455,375)
+Gui.f_WCMaint.cmdAdd.Position(3660,5235)
+Gui.f_WCMaint.cmdAdd.Caption("Add Workcenter")
+Gui.f_WCMaint.cmdAdd.Event(Click,cmdAdd_Click)
+Program.Sub.ScreenSU.End
+
+Program.Sub.Preflight.Start
+Variable.Global.sFQN.Declare(String)
+
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+F.Intrinsic.Control.SetErrorHandler("Main_Err")
+F.Intrinsic.Control.ClearErrors
+
+'chg RRC 04/23/21
+V.Local.sError.Declare(String)
+v.Local.sSQL.Declare(string)
+v.Local.sWC.Declare(string)
+V.Local.sName.Declare(string)
+v.Local.sRet.Declare(string)
+
+'Program is used to populate the table that is used to populate the html
+'It is also used as the Maintenance program
+f.ODBC.Connection!Con.OpenConnection(v.Ambient.PDSN,v.Ambient.PUser,v.Ambient.PPass,750)
+
+'Called from the GUI  Process Line Hook
+f.Intrinsic.Control.If(v.Caller.Hook,=,15881)
+	f.Intrinsic.Control.CallSub(hook15881)
+
+'Called from the SFDC2  Process Line Hook
+F.Intrinsic.Control.ElseIf(v.Caller.Hook,=,50621)
+	F.Intrinsic.Control.CallSub(hook50621)
+	
+f.Intrinsic.Control.Else
+	'Not the Hook so open the Maintenance program
+	
+	'We need to check the maintenance table to populate the fields on the screen
+	'TYPE_ID = H = Logo and Sleep_Timer and W = Workcenters
+	'Grab Type_ID = H if blank then populate with default Logo and 2 minute timer
+	f.ODBC.Connection!Con.OpenLocalRecordsetRW("rstHeader","SELECT LOGO, SLEEP_TIMER FROM GCG_4231_MAINT WHERE TYPE_ID = 'H'")
+	f.Intrinsic.Control.If(v.ODBC.Con!rstHeader.EOF,=,False)
+		'We have a header so populate the logo and/or sleep timer
+		f.Intrinsic.Control.If(v.ODBC.Con!rstHeader.FieldValTrim!LOGO,<>,"")
+			'We have a logo saved so set it
+			v.Global.sFQN.Set(v.ODBC.Con!rstHeader.FieldValTrim!LOGO)
+			f.Intrinsic.File.GetFileNameFromFQN(V.Global.sFQN,V.Local.sName)
+			GUI.f_WCMaint.txtLogo.Text(v.Local.sName)
+		F.Intrinsic.Control.Else
+			'No logo so use our default
+			f.Intrinsic.String.Build("{0}\GCG_4231_GSS_Logo.png",v.Caller.GasDir,v.Global.sFQN)
+			Gui.f_WCMaint.txtLogo.Text("GCG_4231_GSS_Logo.png")
+		f.Intrinsic.Control.EndIf
+		
+		'No check sleep timer
+		f.Intrinsic.Control.If(v.ODBC.Con!rstHeader.FieldValTrim!SLEEP_TIMER,<>,"")
+			'We have a timer so add it
+			Gui.f_WCMaint.txtSleep.Text(v.ODBC.Con!rstHeader.FieldValTrim!SLEEP_TIMER)
+		f.Intrinsic.Control.Else
+			'We don't have a timer so set the default
+			Gui.f_WCMaint.txtSleep.Text("2")
+		f.Intrinsic.Control.EndIf
+			
+	f.Intrinsic.Control.Else
+		'We don't have a header so populate with default information
+		f.Intrinsic.String.Build("{0}\GCG_4231_GSS_Logo.png",v.Caller.GasDir,v.Global.sFQN)
+		Gui.f_WCMaint.txtLogo.Text("GCG_4231_GSS_Logo.png")
+		Gui.f_WCMaint.txtSleep.Text("2")
+		
+	f.Intrinsic.Control.EndIf
+	f.ODBC.Con!rstHeader.Close
+	
+	'Grab Type_ID = W and populate the grid
+	F.Data.DataTable.CreateFromSQL("WC","Con","SELECT RTRIM(WORKCENTER) AS Workcenter, TYPE_ID FROM GCG_4231_MAINT WHERE TYPE_ID = 'W' ORDER BY WORKCENTER ASC",True)
+	'We need to add a delete button column
+	f.Data.DataTable.AddColumn("WC","Delete","String")
+	'Add the DataTable to the Screen
+	Gui.f_WCMaint.GSGCWC.AddGridviewFromDatatable("GridWC","WC")
+	Gui.f_WCMaint.GSGCWC.ColumnEdit("GridWC","Delete","EditorButton","Delete")
+	'Get all of the WC's for the DDL
+	f.ODBC.Connection!Con.ExecuteAndReturn("SELECT MACHINE FROM V_WORKCENTERS ORDER BY MACHINE ASC",V.Local.sWC)
+	F.Intrinsic.String.Replace(V.Local.sWC,"*!*","",V.Local.sWC)
+	F.Intrinsic.String.Replace(V.Local.sWC,"#$#","*!*",V.Local.sWC)
+	Gui.f_WCMaint.GSGCWC.ColumnEdit("GridWC","Workcenter","DropDownList",v.Local.sWC)
+	
+	Gui.f_WCMaint.GSGCWC.SetColumnProperty("GridWC","TYPE_ID","Visible",False)
+	Gui.f_WCMaint.GSGCWC.SetColumnProperty("GridWC","Workcenter","ReadOnly",False)
+	Gui.f_WCMaint.GSGCWC.SetColumnProperty("GridWC","Workcenter","AllowEdit",True)
+	Gui.f_WCMaint.GSGCWC.SetColumnProperty("GridWC","Delete","ReadOnly",True)
+	Gui.f_WCMaint.GSGCWC.SetColumnProperty("GridWC","Delete","AllowEdit",False)
+	
+	Gui.f_WCMaint.GSGCWC.MainView("GridWC")
+	'Show the screen
+	Gui.f_WCMaint..Show
+	
+f.Intrinsic.Control.EndIf
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("Main_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_4231_TrueView_GUI_Process.g2u",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	f.Intrinsic.Control.CallSub(unload)
+Function.Intrinsic.Control.EndIf
+
+
+Program.Sub.Main.End
+
+Program.Sub.Unload.Start
+F.Intrinsic.Control.SetErrorHandler("Unload_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+
+f.ODBC.Connection!Con.Close
+f.Intrinsic.Control.End
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("Unload_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_4231_TrueView_GUI_Process.g2u",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	f.Intrinsic.Control.End
+
+Function.Intrinsic.Control.EndIf
+
+Program.Sub.Unload.End
+
+Program.Sub.cmdLogoBrw_Click.Start
+F.Intrinsic.Control.SetErrorHandler("cmdLogoBrw_Click_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+v.Local.sRet.Declare(string)
+v.Local.sName.Declare(string)
+
+'We need to open a Open File Dialog and allow them to select an image
+'We will set the path to global.sFQN and the 
+f.Intrinsic.UI.ShowOpenFileDialog("","","2097152",v.Local.sRet)
+f.Intrinsic.Control.If(v.Local.sRet,<>,"***CANCEL***")
+	'They picked a file so we need to set the FQP to global variable
+	'Then we need to get the file name and set it to the screen.
+	f.Intrinsic.File.GetUNCName(v.Local.sRet,v.Local.sRet)
+	v.Global.sFQN.Set(v.Local.sRet.Trim)
+	f.Intrinsic.File.GetFileNameFromFQN(V.Global.sFQN,V.Local.sName)
+	GUI.f_WCMaint.txtLogo.Text(v.Local.sName)
+
+F.Intrinsic.Control.EndIf
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("cmdLogoBrw_Click_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_4231_TrueView_GUI_Process.g2u",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	f.Intrinsic.Control.CallSub(unload)
+Function.Intrinsic.Control.EndIf
+
+
+Program.Sub.cmdLogoBrw_Click.End
+
+Program.Sub.cmdSave_Click.Start
+F.Intrinsic.Control.SetErrorHandler("cmdSave_Click_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+v.Local.sSQL.Declare(string)
+
+'We are just updating the DataTable to the Custom table
+F.Data.DataTable.SaveToDB("WC","Con","GCG_4231_MAINT","Workcenter",7,"Workcenter@!@WORKCENTER*!*TYPE_ID@!@TYPE_ID")
+
+F.ODBC.Connection!Con.OpenLocalRecordsetRW("rstUpdate","SELECT LOGO, SLEEP_TIMER, TYPE_ID FROM GCG_4231_MAINT WHERE TYPE_ID = 'H'")
+f.Intrinsic.Control.If(v.ODBC.Con!rstUpdate.EOF,=,True)
+	'We don't have a record so lets add it
+	f.ODBC.Con!rstUpdate.AddNew
+f.Intrinsic.Control.EndIf
+'We are updating the values
+F.ODBC.Con!rstUpdate.Set!LOGO(V.Global.sFQN)
+F.ODBC.Con!rstUpdate.Set!SLEEP_TIMER(V.Screen.f_WCMaint!txtSleep.Text.Long)
+F.ODBC.Con!rstUpdate.Set!TYPE_ID("H")
+F.ODBC.Con!rstUpdate.Update
+F.ODBC.Con!rstUpdate.Close
+
+
+F.Intrinsic.Control.CallSub(unload)
+
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("cmdSave_Click_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_4231_TrueView_GUI_Process.g2u",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	f.Intrinsic.Control.CallSub(unload)
+Function.Intrinsic.Control.EndIf
+
+
+Program.Sub.cmdSave_Click.End
+
+Program.Sub.cmdAdd_Click.Start
+F.Intrinsic.Control.SetErrorHandler("cmdAdd_Click_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+v.Local.sRet.Declare(string)
+v.Local.sFilter.Declare(string)
+
+
+'Adding WorkCenter
+'We need to Open the Work Center browser
+f.Intrinsic.UI.Browser(400,"",v.Local.sRet)
+'If they chose one then we need to add it to the datatable
+f.Intrinsic.Control.If(v.Local.sRet,<>,"***CANCEL***")
+	'Split and get the Workcenter
+	f.Intrinsic.String.Split(v.Local.sRet,"*!*",v.Local.sRet)
+	'We need to see if we already have it in the datatable
+	f.Intrinsic.String.Build("Workcenter = '{0}'",v.Local.sRet(0).Trim,v.Local.sFilter)
+	f.Data.DataView.Create("WC","Test",22,v.Local.sFilter,"")
+	f.Intrinsic.Control.If(v.DataView.WC!Test.RowCount--,=,-1)
+		'We don't have it so add it
+		f.Data.DataTable.AddRow("WC","Workcenter",v.Local.sRet(0).Trim,"TYPE_ID","W")
+	f.Intrinsic.Control.EndIf
+	f.Data.DataView.Close("WC","Test")
+	
+F.Intrinsic.Control.EndIf
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("cmdAdd_Click_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_4231_TrueView_GUI_Process.g2u",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	f.Intrinsic.Control.CallSub(unload)
+Function.Intrinsic.Control.EndIf
+
+
+Program.Sub.cmdAdd_Click.End
+
+Program.Sub.GSGCWC_RowCellClick.Start
+F.Intrinsic.Control.SetErrorHandler("GSGCWC_RowCellClick_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+
+f.Intrinsic.Control.If(v.Args.Column,=,"Delete")
+	'delete was pressed so delete the row
+	f.Data.DataTable.DeleteRow("WC",v.Args.RowIndex)
+f.Intrinsic.Control.EndIf
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("GSGCWC_RowCellClick_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_4231_TrueView_GUI_Process.g2u",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	f.Intrinsic.Control.CallSub(unload)
+Function.Intrinsic.Control.EndIf
+
+
+Program.Sub.GSGCWC_RowCellClick.End
+
+Program.Sub.GSGCWC_CellValueChanged.Start
+F.Intrinsic.Control.SetErrorHandler("GSGCWC_CellCalueChanged_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+v.Local.sFilter.Declare(string)
+
+'We are checking to see if we already have the selected value
+f.Intrinsic.Control.If(v.Args.Column,=,"Workcenter")
+	'They changed WC so check
+	f.Intrinsic.String.Build("Workcenter = '{0}'",v.Args.Value.Trim,v.Local.sFilter)
+	f.Data.DataView.Create("WC","Test",22,v.Local.sFilter,"")
+	f.Intrinsic.Control.If(v.DataView.WC!Test.RowCount--,>,-1)
+		'We have it already so don't let it change
+		f.Data.DataTable.DeleteRow("WC",v.Args.RowHandle)
+	f.Intrinsic.Control.EndIf
+	f.Data.DataView.Close("WC","Test")
+f.Intrinsic.Control.EndIf
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("GSGCWC_CellCalueChanged_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_4231_TrueView_GUI_Process.g2u",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	f.Intrinsic.Control.CallSub(unload)
+Function.Intrinsic.Control.EndIf
+
+
+Program.Sub.GSGCWC_CellValueChanged.End
+
+Program.Sub.Hook15881.Start
+F.Intrinsic.Control.SetErrorHandler("Hook15881_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+v.Local.sSQL.Declare(string)
+v.Local.sWC.Declare(string)
+v.Local.fEst_Rate.Declare(float)
+v.Local.fAct_Rate.Declare(float)
+V.Local.fAvg_Rate.Declare(Float)
+v.Local.sDepartment.Declare(string)
+v.Local.sPart.Declare(string)
+v.Local.sDescription.Declare(string)
+v.Local.sFilter.Declare(string)
+v.Local.fTime.Declare(float)
+v.Local.iCount.Declare(long)
+v.Local.dDate.Declare(date)
+v.Local.iDiffN.Declare(long)
+v.Local.fDiff.Declare(float)
+V.Local.dLunchStart.Declare(Date)
+v.Local.dLunchEnd.Declare(Date)
+v.Local.fHrs.Declare(float)
+V.Local.dNow.Declare(Date)
+V.Local.iHours.Declare(Long)
+V.Local.iMinutes.Declare(Long)
+V.Local.fTempMinutes.Declare(Float)
+V.Local.sHours.Declare(String)
+
+'Get the Actual time
+V.Local.dNow.Set(V.Ambient.Now)
+F.Intrinsic.Date.ConvertTString(V.Passed.009003,"HH:NN",V.Local.dDate)
+f.Intrinsic.Date.DateDiff("N",V.Local.dDate.TimeComp,V.Local.dNow.TimeComp,v.Local.iDiffN)
+f.Intrinsic.Math.Div(v.Local.iDiffN,60,v.Local.fDiff)
+
+'We need to get all of our WC's from our Maintenance table
+f.Data.Dictionary.CreateFromSQL("WCDict","Con","SELECT RTRIM(WORKCENTER) AS WORKCENTER, RTRIM(WORKCENTER) AS WORKCENTER FROM GCG_4231_MAINT WHERE TYPE_ID = 'W'")
+f.Data.Dictionary.SetDefaultReturn("WCDict","***NONE***")
+
+'If the WC is in our list then we need to get more info about the job
+f.Intrinsic.Control.If(v.Dictionary.WCDict![v.Passed.009000],<>,"***NONE***")
+
+	'WC is in our list so we need to use Job_Operations to get the columns to add to custom table
+	'We need to get Actual and Estimate rates
+	F.Intrinsic.String.Build("SELECT UNITS AS EST_RATE, UNITS_COMPLETE, HOURS_ACTUAL FROM V_JOB_OPERATIONS WHERE (RTRIM(JOB) + '-' + RTRIM(SUFFIX)) = '{0}' AND SEQ = '{1}'",V.Passed.000004.Trim,V.Passed.000005.Format000000,V.Local.sSQL)
+	F.ODBC.Connection!Con.OpenLocalRecordsetRO("rstRate",v.Local.sSQL)
+	f.Intrinsic.Control.If(v.ODBC.Con!rstRate.EOF,=,False)
+		'We have rates so grab them.
+		v.Local.fEst_Rate.Set(v.ODBC.Con!rstRate.FieldValFloat!EST_RATE)
+		F.Intrinsic.Control.If(V.ODBC.Con!rstRate.FieldValFloat!HOURS_ACTUAL,=,"0")
+			F.Intrinsic.Control.If(V.ODBC.Con!rstRate.FieldValFloat!UNITS_COMPLETE,=,"0")
+				V.Local.fAvg_Rate.Set(0)
+			F.Intrinsic.Control.Else
+				V.Local.fAvg_Rate.Set(0)
+			F.Intrinsic.Control.EndIf
+		F.Intrinsic.Control.Else
+			'Edit - calculate the Average Rate to save to the DB
+			F.Intrinsic.Math.Div(V.ODBC.Con!rstRate.FieldValFloat!UNITS_COMPLETE,V.ODBC.Con!rstRate.FieldValFloat!HOURS_ACTUAL,V.Local.fAvg_Rate)
+			F.Intrinsic.Math.Round(V.Local.fAvg_Rate,0,1,V.Local.fAvg_Rate)
+		F.Intrinsic.Control.EndIf
+	f.Intrinsic.Control.Else
+		'We didn't find the job suffix seq so quit
+		f.Intrinsic.Control.CallSub(unload)
+	f.Intrinsic.Control.EndIf
+	f.ODBC.Con!rstRate.Close
+	
+	'We need to get the Department for the workcenter
+	f.Intrinsic.String.Build("SELECT WC_DEPT FROM V_WORKCENTERS WHERE MACHINE = '{0}' ",V.Passed.009000.Trim,V.Local.sSQL)
+	F.ODBC.Connection!Con.OpenLocalRecordsetRO("rstDept",v.Local.sSQL)
+	f.Intrinsic.Control.If(v.ODBC.Con!rstDept.EOF,=,False)
+		'We have a department so set it
+		v.Local.sDepartment.Set(v.ODBC.Con!rstDept.FieldValTrim!WC_DEPT)
+	f.Intrinsic.Control.EndIf
+	f.ODBC.Con!rstDept.Close	
+
+	'We need to check and see if the time is within lunch and break times for the person and shift.
+	F.Intrinsic.String.Build("SELECT SHIFT FROM V_EMPLOYEE_MSTR WHERE EMPLOYEE = '{0}' ",V.Passed.009993,V.Local.sSQL)
+	F.ODBC.Connection!Con.OpenLocalRecordsetRO("rstShift",v.Local.sSQL)
+	f.Intrinsic.Control.If(v.ODBC.Con!rstShift.EOF,=,False)
+		F.Intrinsic.String.Build("SELECT LUN_START, LUN_STOP, LUN_HRS, START_BK1, STOP_BK1, HRS_BK1, START_BK2, STOP_BK2, HRS_BK2, START_BK3, STOP_BK3, HRS_BK3, START_BK4, STOP_BK4, HRS_BK4 FROM LUNCH_SHIFT WHERE SHIFT = '{0}' AND DEPT = '{1}' ",V.ODBC.Con!rstShift.FieldVal!SHIFT, v.Local.sDepartment,V.Local.sSQL)
+		F.ODBC.Connection!Con.OpenLocalRecordsetRO("rstBreak",v.Local.sSQL)
+		f.Intrinsic.Control.If(v.ODBC.Con!rstBreak.EOF,=,False)
+			'Check and see if our break and lunch times are within our in and out time
+			F.Intrinsic.Date.ConvertTString(V.ODBC.Con!rstBreak.FieldVal!LUN_START,"HH:NN",V.Local.dLunchStart)
+			F.Intrinsic.Date.ConvertTString(V.ODBC.Con!rstBreak.FieldVal!LUN_STOP,"HH:NN",V.Local.dLunchEnd)
+			f.Intrinsic.Control.If(v.Local.dDate.TimeComp,<=,v.Local.dLunchStart.TimeComp,"AND",V.Local.dNow.TimeComp,>=,v.Local.dLunchEnd.TimeComp)
+				'we need to subtract Lun_hrs from our fDiff
+				'Lunch is a little different. It could be an hour or less. We're going to have to get the string, split it, and handle the values differently. The left two are already in hours format, the right two need to be divided by 60
+				v.Local.sHours.Set(v.ODBC.Con!rstBreak.FieldVal!LUN_HRS)
+				F.Intrinsic.String.Left(V.Local.sHours,2,V.Local.iHours)
+				F.Intrinsic.String.Right(V.Local.sHours,2,V.Local.iMinutes)
+				F.Intrinsic.Math.Div(V.Local.iMinutes,60,V.Local.fTempMinutes)
+				F.Intrinsic.Math.Add(V.Local.iHours.Float,V.Local.fTempMinutes,V.Local.fHrs)
+				F.Intrinsic.Math.Sub(V.Local.fDiff,V.Local.fHrs,V.Local.fDiff)
+			f.Intrinsic.Control.EndIf
+			'BK1
+			F.Intrinsic.Date.ConvertTString(V.ODBC.Con!rstBreak.FieldVal!START_BK1,"HH:NN",V.Local.dLunchStart)
+			F.Intrinsic.Date.ConvertTString(V.ODBC.Con!rstBreak.FieldVal!STOP_BK1,"HH:NN",V.Local.dLunchEnd)
+			f.Intrinsic.Control.If(v.Local.dDate.TimeComp,<=,v.Local.dLunchStart.TimeComp,"AND",V.Local.dNow.TimeComp,>=,v.Local.dLunchEnd.TimeComp)
+				'we need to subtract Lun_hrs from our fDiff
+				v.Local.fHrs.Set(v.ODBC.Con!rstBreak.FieldVal!HRS_BK1)
+				'Breaks should never exceed an hour. We need to just divide the value by 60 to get the number of hours. 
+				'F.Intrinsic.Math.Div(V.Local.fHrs,100,V.Local.fHrs)
+				F.Intrinsic.Math.Div(V.Local.fHrs,60,V.Local.fHrs)
+				F.Intrinsic.Math.Sub(V.Local.fDiff,V.Local.fHrs,V.Local.fDiff)
+			f.Intrinsic.Control.EndIf
+			'BK2
+			F.Intrinsic.Date.ConvertTString(V.ODBC.Con!rstBreak.FieldVal!START_BK2,"HH:NN",V.Local.dLunchStart)
+			F.Intrinsic.Date.ConvertTString(V.ODBC.Con!rstBreak.FieldVal!STOP_BK2,"HH:NN",V.Local.dLunchEnd)
+			f.Intrinsic.Control.If(v.Local.dDate.TimeComp,<=,v.Local.dLunchStart.TimeComp,"AND",V.Local.dNow.TimeComp,>=,v.Local.dLunchEnd.TimeComp)
+				'we need to subtract Lun_hrs from our fDiff
+				'Breaks should never exceed an hour. We need to just divide the value by 60 to get the number of hours. 
+				v.Local.fHrs.Set(v.ODBC.Con!rstBreak.FieldVal!HRS_BK2)
+				'F.Intrinsic.Math.Div(V.Local.fHrs,100,V.Local.fHrs)
+				F.Intrinsic.Math.Div(V.Local.fHrs,60,V.Local.fHrs)
+				F.Intrinsic.Math.Sub(V.Local.fDiff,V.Local.fHrs,V.Local.fDiff)
+			f.Intrinsic.Control.EndIf
+			'BK3
+			F.Intrinsic.Date.ConvertTString(V.ODBC.Con!rstBreak.FieldVal!START_BK3,"HH:NN",V.Local.dLunchStart)
+			F.Intrinsic.Date.ConvertTString(V.ODBC.Con!rstBreak.FieldVal!STOP_BK3,"HH:NN",V.Local.dLunchEnd)
+			f.Intrinsic.Control.If(v.Local.dDate.TimeComp,<=,v.Local.dLunchStart.TimeComp,"AND",V.Local.dNow.TimeComp,>=,v.Local.dLunchEnd.TimeComp)
+				'we need to subtract Lun_hrs from our fDiff
+				'Breaks should never exceed an hour. We need to just divide the value by 60 to get the number of hours. 
+				v.Local.fHrs.Set(v.ODBC.Con!rstBreak.FieldVal!HRS_BK3)
+				'F.Intrinsic.Math.Div(V.Local.fHrs,100,V.Local.fHrs)
+				F.Intrinsic.Math.Div(V.Local.fHrs,60,V.Local.fHrs)
+				F.Intrinsic.Math.Sub(V.Local.fDiff,V.Local.fHrs,V.Local.fDiff)
+			f.Intrinsic.Control.EndIf
+			'BK4
+			F.Intrinsic.Date.ConvertTString(V.ODBC.Con!rstBreak.FieldVal!START_BK4,"HH:NN",V.Local.dLunchStart)
+			F.Intrinsic.Date.ConvertTString(V.ODBC.Con!rstBreak.FieldVal!STOP_BK4,"HH:NN",V.Local.dLunchEnd)
+			f.Intrinsic.Control.If(v.Local.dDate.TimeComp,<=,v.Local.dLunchStart.TimeComp,"AND",V.Local.dNow.TimeComp,>=,v.Local.dLunchEnd.TimeComp)
+				'we need to subtract Lun_hrs from our fDiff
+				'Breaks should never exceed an hour. We need to just divide the value by 60 to get the number of hours. 
+				v.Local.fHrs.Set(v.ODBC.Con!rstBreak.FieldVal!HRS_BK4)
+				'F.Intrinsic.Math.Div(V.Local.fHrs,100,V.Local.fHrs)
+				F.Intrinsic.Math.Div(V.Local.fHrs,60,V.Local.fHrs)
+				F.Intrinsic.Math.Sub(V.Local.fDiff,V.Local.fHrs,V.Local.fDiff)
+			f.Intrinsic.Control.EndIf
+			
+		f.Intrinsic.Control.EndIf
+		f.ODBC.Con!rstBreak.Close
+	f.Intrinsic.Control.EndIf
+	f.ODBC.Con!rstShift.Close
+	'Units completed / hours actual to get actual rate
+	f.Intrinsic.Control.If(v.Local.fDiff,<>,0)
+		f.Intrinsic.Math.Div(v.Passed.000001,v.Local.fDiff,v.Local.fAct_Rate)
+	f.Intrinsic.Control.Else
+		v.Local.fAct_Rate.Set(0)
+	f.Intrinsic.Control.EndIf
+	f.Intrinsic.Math.Round(v.Local.fAct_Rate,2,v.Local.fAct_Rate)
+	
+	
+	'We need to get the Job information
+	f.Intrinsic.String.Build("SELECT PART, DESCRIPTION FROM V_JOB_HEADER WHERE RTRIM(JOB) + '-' + RTRIM(SUFFIX) = '{0}' ",V.Passed.000004.Trim,V.Local.sSQL)
+	F.ODBC.Connection!Con.OpenLocalRecordsetRO("rstJob",v.Local.sSQL)
+	f.Intrinsic.Control.If(v.ODBC.Con!rstJob.EOF,=,False)
+		'We have the job so get the part and description
+		v.Local.sPart.Set(v.ODBC.Con!rstJob.FieldValTrim!PART)
+		V.Local.sDescription.Set(V.ODBC.Con!rstJob.FieldValTrim!DESCRIPTION)
+	f.Intrinsic.Control.EndIf
+	f.ODBC.Con!rstJob.Close
+	
+	'We have all of our values so now we need to save them into our custom table
+	'We are going to load the whole table into a datatable
+	f.Data.DataTable.CreateFromSQL("Trueview","Con","SELECT RTRIM(DEPARTMENT) AS DEPARTMENT, RTRIM(WORKCENTER) AS WORKCENTER, RTRIM(JOBSUFFIX) AS JOBSUFFIX, RTRIM(PART) AS PART, RTRIM(SEQ) AS SEQ, RTRIM(DESCRIPTION) AS DESCRIPTION, EST_RATE, ACT_RATE, CURRENT_TIME, CURRENT_DATE, AVG_RATE FROM GCG_4231_TRUEVIEW", True)
+	'We need to remove all rows that are older than 2 hours
+	f.Intrinsic.Date.Hour(V.Local.dNow,v.Local.fTime)
+	f.Intrinsic.Date.Minute(V.Local.dNow,v.Local.sFilter)
+	f.Intrinsic.Math.Div(v.Local.sFilter.Float,60,v.Local.sFilter)
+	f.Intrinsic.Math.Add(v.Local.fTime,v.Local.sFilter.Float,v.Local.fTime)
+	F.Intrinsic.Math.Sub(V.Local.fTime,2,V.Local.fTime)
+	f.Intrinsic.Control.If(v.Local.fTime,<,0)
+		f.Intrinsic.Date.DateAdd("D",-1,v.Ambient.Date,v.Local.dDate)
+		'We need to put the time back from 24
+		f.Intrinsic.Math.Add(24,v.Local.fTime,v.Local.fTime)
+		f.Intrinsic.String.Build("CURRENT_DATE = '{0}' AND CURRENT_TIME <= {1}",v.Local.dDate,v.Local.fTime,v.Local.sFilter)
+	f.Intrinsic.Control.Else
+		f.Intrinsic.String.Build("CURRENT_DATE = '{0}' AND CURRENT_TIME <= {1}",v.Ambient.Date,v.Local.fTime,v.Local.sFilter)
+	f.Intrinsic.Control.EndIf
+	f.Data.DataView.Create("Trueview","TimeCheck",22,V.Local.sFilter,"")
+	'If we have anything in the view then we need to loop through it and delete them.
+	f.Intrinsic.Control.For(v.Local.iCount,v.DataView.Trueview!TimeCheck.RowCount--,0,-1)
+		'Delete the Row
+		f.Data.DataTable.DeleteRow("Trueview",v.DataView.Trueview!TimeCheck(v.Local.iCount).DataTableIndex)
+	f.Intrinsic.Control.Next(v.Local.iCount)
+	F.Data.DataView.Close("Trueview","TimeCheck")
+	
+	'Delete all rows that are from yesterday.
+	f.Intrinsic.String.Build("CURRENT_DATE < '{0}'",V.Ambient.Date,V.Local.sFilter)
+	f.Data.DataView.Create("Trueview","TimeCheck",22,V.Local.sFilter,"")
+	'If we have anything in the view then we need to loop through it and delete them.
+	f.Intrinsic.Control.For(v.Local.iCount,v.DataView.Trueview!TimeCheck.RowCount--,0,-1)
+		'Delete the Row
+		f.Data.DataTable.DeleteRow("Trueview",v.DataView.Trueview!TimeCheck(v.Local.iCount).DataTableIndex)
+	f.Intrinsic.Control.Next(v.Local.iCount)
+	F.Data.DataView.Close("Trueview","TimeCheck")
+	
+	f.Intrinsic.Date.Hour(V.Local.dNow,v.Local.fTime)
+	f.Intrinsic.Date.Minute(V.Local.dNow,v.Local.sFilter)
+	f.Intrinsic.Math.Div(v.Local.sFilter.Float,60,v.Local.sFilter)
+	f.Intrinsic.Math.Add(v.Local.fTime,v.Local.sFilter.Float,v.Local.fTime)
+	
+	'We need to check to make sure the row doesn't already exist.
+	f.Intrinsic.String.Build("JOBSUFFIX = '{0}' AND SEQ = '{1}'",V.Passed.000004.Trim,V.Passed.000005.Format000000,V.Local.sFilter)
+	F.Data.DataView.Create("Trueview","TimeCheck",22,v.Local.sFilter,"")
+	f.Intrinsic.Control.If(v.DataView.Trueview!TimeCheck.RowCount--,>,-1)
+		'The row already exists so we need to update it instead.
+		f.Data.DataTable.SetValue("Trueview",v.DataView.Trueview!TimeCheck(0).DataTableIndex,"DEPARTMENT",V.Local.sDepartment,"WORKCENTER",V.Passed.009000.Trim,"JOBSUFFIX",V.Passed.000004.Trim,"PART",V.Local.sPart.Trim,"SEQ",V.Passed.000005.Format000000,"DESCRIPTION",V.Local.sDescription.Trim,"EST_RATE",V.Local.fEst_Rate,"ACT_RATE",V.Local.fAct_Rate,"CURRENT_TIME",V.Local.fTime,"CURRENT_DATE",V.Ambient.Date,"AVG_RATE",V.Local.fAvg_Rate)
+	f.Intrinsic.Control.Else
+		'all of the old ones have been deleted so lets add in the new line
+		f.Data.DataTable.AddRow("Trueview","DEPARTMENT",V.Local.sDepartment,"WORKCENTER",V.Passed.009000.Trim,"JOBSUFFIX",V.Passed.000004.Trim,"PART",V.Local.sPart.Trim,"SEQ",V.Passed.000005.Format000000,"DESCRIPTION",V.Local.sDescription.Trim,"EST_RATE",V.Local.fEst_Rate,"ACT_RATE",V.Local.fAct_Rate,"CURRENT_TIME",V.Local.fTime,"CURRENT_DATE",V.Ambient.Date,"AVG_RATE",V.Local.fAvg_Rate)
+	f.Intrinsic.Control.EndIf
+	
+	'We deleted the old rows and added our new one
+	'Now we can save back to DB
+	f.Data.DataTable.SaveToDB("Trueview","Con","GCG_4231_TRUEVIEW","JOBSUFFIX*!*SEQ",7)
+	
+	F.Data.DataTable.Close("Trueview")
+	
+f.Intrinsic.Control.Else
+	f.Intrinsic.Control.CallSub(unload)
+f.Intrinsic.Control.EndIf
+
+
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("Hook15881_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_4231_TrueView_GUI_Process.g2u",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	f.Intrinsic.Control.CallSub(unload)
+Function.Intrinsic.Control.EndIf
+
+
+Program.Sub.Hook15881.End
+
+Program.Sub.Hook50621.Start
+F.Intrinsic.Control.SetErrorHandler("Hook50621_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+v.Local.sSQL.Declare(string)
+v.Local.sWC.Declare(string)
+v.Local.fEst_Rate.Declare(float)
+v.Local.fAct_Rate.Declare(float)
+V.Local.fAvg_Rate.Declare(Float)
+v.Local.sDepartment.Declare(string)
+v.Local.sPart.Declare(string)
+v.Local.sDescription.Declare(string)
+v.Local.sFilter.Declare(string)
+v.Local.fTime.Declare(float)
+v.Local.iCount.Declare(long)
+v.Local.dDate.Declare(date)
+v.Local.iDiffN.Declare(long)
+v.Local.fDiff.Declare(float)
+V.Local.dLunchStart.Declare(Date)
+v.Local.dLunchEnd.Declare(Date)
+v.Local.fHrs.Declare(float)
+V.Local.dNow.Declare(Date)
+V.Local.iHours.Declare(Long)
+V.Local.iMinutes.Declare(Long)
+V.Local.fTempMinutes.Declare(Float)
+V.Local.sHours.Declare(String)
+V.Local.sJobSuffix.Declare(String)
+
+'Get the Actual time
+V.Local.dNow.Set(V.Ambient.Now)
+
+'We need to get the Sequence Start Time
+f.Intrinsic.String.Build("SELECT START_TIME FROM V_JOBS_IN_PROCESS_G WHERE JOB='{0}' AND SUFFIX='{1}' AND SEQ='{2}' AND EMPLOYEE='{3}' AND WORKCENTER='{4}'",V.Passed.TXT-JOB.Trim,V.Passed.TXT-SUFFIX.Trim,V.Passed.TXT-SEQ.Format000000,V.Passed.Employee,V.Passed.WC,V.Local.sSQL)
+F.ODBC.Connection!Con.OpenLocalRecordsetRO("rstSTime",v.Local.sSQL)
+f.Intrinsic.Control.If(v.ODBC.Con!rstSTime.EOF,=,False)
+	'Get Start Time from V_JOB_IN_PROCESS_G
+'F.Intrinsic.UI.Msgbox(V.ODBC.Con!rstSTime.FieldVal!START_TIME,"time")
+'	F.Intrinsic.Date.ConvertTString(V.ODBC.Con!rstSTime.FieldVal!START_TIME,"HH:NN",V.Local.dDate)
+	V.Local.dDate.Set(V.ODBC.Con!rstSTime.FieldVal!START_TIME)
+F.Intrinsic.Control.Else
+	'No record found for time
+	V.Local.dDate.Set(V.Ambient.Now)
+f.Intrinsic.Control.EndIf
+f.ODBC.Con!rstSTime.Close
+
+f.Intrinsic.Date.DateDiff("N",V.Local.dDate.TimeComp,V.Local.dNow.TimeComp,v.Local.iDiffN)
+f.Intrinsic.Math.Div(v.Local.iDiffN,60,v.Local.fDiff)
+
+'We need to get all of our WC's from our Maintenance table
+f.Data.Dictionary.CreateFromSQL("WCDict","Con","SELECT RTRIM(WORKCENTER) AS WORKCENTER, RTRIM(WORKCENTER) AS WORKCENTER FROM GCG_4231_MAINT WHERE TYPE_ID = 'W'")
+f.Data.Dictionary.SetDefaultReturn("WCDict","***NONE***")
+
+'If the WC is in our list then we need to get more info about the job
+f.Intrinsic.Control.If(v.Dictionary.WCDict![v.Passed.WC],<>,"***NONE***")
+
+	'WC is in our list so we need to use Job_Operations to get the columns to add to custom table
+	'We need to get Actual and Estimate rates
+	F.Intrinsic.String.Build("SELECT UNITS AS EST_RATE, UNITS_COMPLETE, HOURS_ACTUAL FROM V_JOB_OPERATIONS WHERE RTRIM(JOB) ='{0}' AND RTRIM(SUFFIX) = '{1}' AND SEQ = '{2}'",V.Passed.TXT-JOB.Trim,V.Passed.TXT-SUFFIX.Trim,V.Passed.TXT-SEQ.Format000000,V.Local.sSQL)
+	F.ODBC.Connection!Con.OpenLocalRecordsetRO("rstRate",v.Local.sSQL)
+	f.Intrinsic.Control.If(v.ODBC.Con!rstRate.EOF,=,False)
+		'We have rates so grab them.
+		v.Local.fEst_Rate.Set(v.ODBC.Con!rstRate.FieldValFloat!EST_RATE)
+		F.Intrinsic.Control.If(V.ODBC.Con!rstRate.FieldValFloat!HOURS_ACTUAL,=,"0")
+			F.Intrinsic.Control.If(V.ODBC.Con!rstRate.FieldValFloat!UNITS_COMPLETE,=,"0")
+				V.Local.fAvg_Rate.Set(0)
+			F.Intrinsic.Control.Else
+				V.Local.fAvg_Rate.Set(0)
+			F.Intrinsic.Control.EndIf
+		F.Intrinsic.Control.Else
+			'Edit - calculate the Average Rate to save to the DB
+			F.Intrinsic.Math.Div(V.ODBC.Con!rstRate.FieldValFloat!UNITS_COMPLETE,V.ODBC.Con!rstRate.FieldValFloat!HOURS_ACTUAL,V.Local.fAvg_Rate)
+			F.Intrinsic.Math.Round(V.Local.fAvg_Rate,0,1,V.Local.fAvg_Rate)
+		F.Intrinsic.Control.EndIf
+	f.Intrinsic.Control.Else
+		'We didn't find the job suffix seq so quit
+		f.Intrinsic.Control.CallSub(unload)
+	f.Intrinsic.Control.EndIf
+	f.ODBC.Con!rstRate.Close
+	
+	'We need to get the Department for the workcenter
+	f.Intrinsic.String.Build("SELECT WC_DEPT FROM V_WORKCENTERS WHERE MACHINE = '{0}' ",V.Passed.WC.Trim,V.Local.sSQL)
+	F.ODBC.Connection!Con.OpenLocalRecordsetRO("rstDept",v.Local.sSQL)
+	f.Intrinsic.Control.If(v.ODBC.Con!rstDept.EOF,=,False)
+		'We have a department so set it
+		v.Local.sDepartment.Set(v.ODBC.Con!rstDept.FieldValTrim!WC_DEPT)
+	f.Intrinsic.Control.EndIf
+	f.ODBC.Con!rstDept.Close	
+
+	'We need to check and see if the time is within lunch and break times for the person and shift.
+	F.Intrinsic.String.Build("SELECT SHIFT FROM V_EMPLOYEE_MSTR WHERE EMPLOYEE = '{0}' ",V.Passed.Employee,V.Local.sSQL)
+	F.ODBC.Connection!Con.OpenLocalRecordsetRO("rstShift",v.Local.sSQL)
+	f.Intrinsic.Control.If(v.ODBC.Con!rstShift.EOF,=,False)
+		F.Intrinsic.String.Build("SELECT LUN_START, LUN_STOP, LUN_HRS, START_BK1, STOP_BK1, HRS_BK1, START_BK2, STOP_BK2, HRS_BK2, START_BK3, STOP_BK3, HRS_BK3, START_BK4, STOP_BK4, HRS_BK4 FROM LUNCH_SHIFT WHERE SHIFT = '{0}' AND DEPT = '{1}' ",V.ODBC.Con!rstShift.FieldVal!SHIFT, v.Local.sDepartment,V.Local.sSQL)
+		F.ODBC.Connection!Con.OpenLocalRecordsetRO("rstBreak",v.Local.sSQL)
+		f.Intrinsic.Control.If(v.ODBC.Con!rstBreak.EOF,=,False)
+			'Check and see if our break and lunch times are within our in and out time
+			F.Intrinsic.Date.ConvertTString(V.ODBC.Con!rstBreak.FieldVal!LUN_START,"HH:NN",V.Local.dLunchStart)
+			F.Intrinsic.Date.ConvertTString(V.ODBC.Con!rstBreak.FieldVal!LUN_STOP,"HH:NN",V.Local.dLunchEnd)
+			f.Intrinsic.Control.If(v.Local.dDate.TimeComp,<=,v.Local.dLunchStart.TimeComp,"AND",V.Local.dNow.TimeComp,>=,v.Local.dLunchEnd.TimeComp)
+				'we need to subtract Lun_hrs from our fDiff
+				'Lunch is a little different. It could be an hour or less. We're going to have to get the string, split it, and handle the values differently. The left two are already in hours format, the right two need to be divided by 60
+				v.Local.sHours.Set(v.ODBC.Con!rstBreak.FieldVal!LUN_HRS)
+				F.Intrinsic.String.Left(V.Local.sHours,2,V.Local.iHours)
+				F.Intrinsic.String.Right(V.Local.sHours,2,V.Local.iMinutes)
+				F.Intrinsic.Math.Div(V.Local.iMinutes,60,V.Local.fTempMinutes)
+				F.Intrinsic.Math.Add(V.Local.iHours.Float,V.Local.fTempMinutes,V.Local.fHrs)
+				F.Intrinsic.Math.Sub(V.Local.fDiff,V.Local.fHrs,V.Local.fDiff)
+			f.Intrinsic.Control.EndIf
+			'BK1
+			F.Intrinsic.Date.ConvertTString(V.ODBC.Con!rstBreak.FieldVal!START_BK1,"HH:NN",V.Local.dLunchStart)
+			F.Intrinsic.Date.ConvertTString(V.ODBC.Con!rstBreak.FieldVal!STOP_BK1,"HH:NN",V.Local.dLunchEnd)
+			f.Intrinsic.Control.If(v.Local.dDate.TimeComp,<=,v.Local.dLunchStart.TimeComp,"AND",V.Local.dNow.TimeComp,>=,v.Local.dLunchEnd.TimeComp)
+				'we need to subtract Lun_hrs from our fDiff
+				v.Local.fHrs.Set(v.ODBC.Con!rstBreak.FieldVal!HRS_BK1)
+				'Breaks should never exceed an hour. We need to just divide the value by 60 to get the number of hours. 
+				'F.Intrinsic.Math.Div(V.Local.fHrs,100,V.Local.fHrs)
+				F.Intrinsic.Math.Div(V.Local.fHrs,60,V.Local.fHrs)
+				F.Intrinsic.Math.Sub(V.Local.fDiff,V.Local.fHrs,V.Local.fDiff)
+			f.Intrinsic.Control.EndIf
+			'BK2
+			F.Intrinsic.Date.ConvertTString(V.ODBC.Con!rstBreak.FieldVal!START_BK2,"HH:NN",V.Local.dLunchStart)
+			F.Intrinsic.Date.ConvertTString(V.ODBC.Con!rstBreak.FieldVal!STOP_BK2,"HH:NN",V.Local.dLunchEnd)
+			f.Intrinsic.Control.If(v.Local.dDate.TimeComp,<=,v.Local.dLunchStart.TimeComp,"AND",V.Local.dNow.TimeComp,>=,v.Local.dLunchEnd.TimeComp)
+				'we need to subtract Lun_hrs from our fDiff
+				'Breaks should never exceed an hour. We need to just divide the value by 60 to get the number of hours. 
+				v.Local.fHrs.Set(v.ODBC.Con!rstBreak.FieldVal!HRS_BK2)
+				'F.Intrinsic.Math.Div(V.Local.fHrs,100,V.Local.fHrs)
+				F.Intrinsic.Math.Div(V.Local.fHrs,60,V.Local.fHrs)
+				F.Intrinsic.Math.Sub(V.Local.fDiff,V.Local.fHrs,V.Local.fDiff)
+			f.Intrinsic.Control.EndIf
+			'BK3
+			F.Intrinsic.Date.ConvertTString(V.ODBC.Con!rstBreak.FieldVal!START_BK3,"HH:NN",V.Local.dLunchStart)
+			F.Intrinsic.Date.ConvertTString(V.ODBC.Con!rstBreak.FieldVal!STOP_BK3,"HH:NN",V.Local.dLunchEnd)
+			f.Intrinsic.Control.If(v.Local.dDate.TimeComp,<=,v.Local.dLunchStart.TimeComp,"AND",V.Local.dNow.TimeComp,>=,v.Local.dLunchEnd.TimeComp)
+				'we need to subtract Lun_hrs from our fDiff
+				'Breaks should never exceed an hour. We need to just divide the value by 60 to get the number of hours. 
+				v.Local.fHrs.Set(v.ODBC.Con!rstBreak.FieldVal!HRS_BK3)
+				'F.Intrinsic.Math.Div(V.Local.fHrs,100,V.Local.fHrs)
+				F.Intrinsic.Math.Div(V.Local.fHrs,60,V.Local.fHrs)
+				F.Intrinsic.Math.Sub(V.Local.fDiff,V.Local.fHrs,V.Local.fDiff)
+			f.Intrinsic.Control.EndIf
+			'BK4
+			F.Intrinsic.Date.ConvertTString(V.ODBC.Con!rstBreak.FieldVal!START_BK4,"HH:NN",V.Local.dLunchStart)
+			F.Intrinsic.Date.ConvertTString(V.ODBC.Con!rstBreak.FieldVal!STOP_BK4,"HH:NN",V.Local.dLunchEnd)
+			f.Intrinsic.Control.If(v.Local.dDate.TimeComp,<=,v.Local.dLunchStart.TimeComp,"AND",V.Local.dNow.TimeComp,>=,v.Local.dLunchEnd.TimeComp)
+				'we need to subtract Lun_hrs from our fDiff
+				'Breaks should never exceed an hour. We need to just divide the value by 60 to get the number of hours. 
+				v.Local.fHrs.Set(v.ODBC.Con!rstBreak.FieldVal!HRS_BK4)
+				'F.Intrinsic.Math.Div(V.Local.fHrs,100,V.Local.fHrs)
+				F.Intrinsic.Math.Div(V.Local.fHrs,60,V.Local.fHrs)
+				F.Intrinsic.Math.Sub(V.Local.fDiff,V.Local.fHrs,V.Local.fDiff)
+			f.Intrinsic.Control.EndIf
+			
+		f.Intrinsic.Control.EndIf
+		f.ODBC.Con!rstBreak.Close
+	f.Intrinsic.Control.EndIf
+	f.ODBC.Con!rstShift.Close
+	'Units completed / hours actual to get actual rate
+	f.Intrinsic.Control.If(v.Local.fDiff,<>,0)
+		f.Intrinsic.Math.Div(v.Passed.GOOD-PIECES,v.Local.fDiff,v.Local.fAct_Rate)
+	f.Intrinsic.Control.Else
+		v.Local.fAct_Rate.Set(0)
+	f.Intrinsic.Control.EndIf
+	f.Intrinsic.Math.Round(v.Local.fAct_Rate,2,v.Local.fAct_Rate)
+	
+	
+	'We need to get the Job information
+	f.Intrinsic.String.Build("SELECT PART, DESCRIPTION FROM V_JOB_HEADER WHERE RTRIM(JOB) ='{0}' AND RTRIM(SUFFIX) = '{1}' ",V.Passed.TXT-JOB.Trim,V.Passed.TXT-SUFFIX.Trim,V.Local.sSQL)
+	F.ODBC.Connection!Con.OpenLocalRecordsetRO("rstJob",v.Local.sSQL)
+	f.Intrinsic.Control.If(v.ODBC.Con!rstJob.EOF,=,False)
+		'We have the job so get the part and description
+		v.Local.sPart.Set(v.ODBC.Con!rstJob.FieldValTrim!PART)
+		V.Local.sDescription.Set(V.ODBC.Con!rstJob.FieldValTrim!DESCRIPTION)
+	f.Intrinsic.Control.EndIf
+	f.ODBC.Con!rstJob.Close
+	
+	'We have all of our values so now we need to save them into our custom table
+	'We are going to load the whole table into a datatable
+	f.Data.DataTable.CreateFromSQL("Trueview","Con","SELECT RTRIM(DEPARTMENT) AS DEPARTMENT, RTRIM(WORKCENTER) AS WORKCENTER, RTRIM(JOBSUFFIX) AS JOBSUFFIX, RTRIM(PART) AS PART, RTRIM(SEQ) AS SEQ, RTRIM(DESCRIPTION) AS DESCRIPTION, EST_RATE, ACT_RATE, CURRENT_TIME, CURRENT_DATE, AVG_RATE FROM GCG_4231_TRUEVIEW", True)
+	'We need to remove all rows that are older than 2 hours
+	f.Intrinsic.Date.Hour(V.Local.dNow,v.Local.fTime)
+	f.Intrinsic.Date.Minute(V.Local.dNow,v.Local.sFilter)
+	f.Intrinsic.Math.Div(v.Local.sFilter.Float,60,v.Local.sFilter)
+	f.Intrinsic.Math.Add(v.Local.fTime,v.Local.sFilter.Float,v.Local.fTime)
+	F.Intrinsic.Math.Sub(V.Local.fTime,2,V.Local.fTime)
+	f.Intrinsic.Control.If(v.Local.fTime,<,0)
+		f.Intrinsic.Date.DateAdd("D",-1,v.Ambient.Date,v.Local.dDate)
+		'We need to put the time back from 24
+		f.Intrinsic.Math.Add(24,v.Local.fTime,v.Local.fTime)
+		f.Intrinsic.String.Build("CURRENT_DATE = '{0}' AND CURRENT_TIME <= {1}",v.Local.dDate,v.Local.fTime,v.Local.sFilter)
+	f.Intrinsic.Control.Else
+		f.Intrinsic.String.Build("CURRENT_DATE = '{0}' AND CURRENT_TIME <= {1}",v.Ambient.Date,v.Local.fTime,v.Local.sFilter)
+	f.Intrinsic.Control.EndIf
+	f.Data.DataView.Create("Trueview","TimeCheck",22,V.Local.sFilter,"")
+	'If we have anything in the view then we need to loop through it and delete them.
+	f.Intrinsic.Control.For(v.Local.iCount,v.DataView.Trueview!TimeCheck.RowCount--,0,-1)
+		'Delete the Row
+		f.Data.DataTable.DeleteRow("Trueview",v.DataView.Trueview!TimeCheck(v.Local.iCount).DataTableIndex)
+	f.Intrinsic.Control.Next(v.Local.iCount)
+	F.Data.DataView.Close("Trueview","TimeCheck")
+	
+	'Delete all rows that are from yesterday.
+	f.Intrinsic.String.Build("CURRENT_DATE < '{0}'",V.Ambient.Date,V.Local.sFilter)
+	f.Data.DataView.Create("Trueview","TimeCheck",22,V.Local.sFilter,"")
+	'If we have anything in the view then we need to loop through it and delete them.
+	f.Intrinsic.Control.For(v.Local.iCount,v.DataView.Trueview!TimeCheck.RowCount--,0,-1)
+		'Delete the Row
+		f.Data.DataTable.DeleteRow("Trueview",v.DataView.Trueview!TimeCheck(v.Local.iCount).DataTableIndex)
+	f.Intrinsic.Control.Next(v.Local.iCount)
+	F.Data.DataView.Close("Trueview","TimeCheck")
+	
+	f.Intrinsic.Date.Hour(V.Local.dNow,v.Local.fTime)
+	f.Intrinsic.Date.Minute(V.Local.dNow,v.Local.sFilter)
+	f.Intrinsic.Math.Div(v.Local.sFilter.Float,60,v.Local.sFilter)
+	f.Intrinsic.Math.Add(v.Local.fTime,v.Local.sFilter.Float,v.Local.fTime)
+	
+	'We need to check to make sure the row doesn't already exist.
+	F.Intrinsic.String.Build("{0}-{1}",V.Passed.TXT-JOB.Trim,V.Passed.TXT-SUFFIX.Trim,V.Local.sJobSuffix)
+	f.Intrinsic.String.Build("JOBSUFFIX = '{0}' AND SEQ = '{1}'",V.Local.sJobSuffix,V.Passed.TXT-SEQ.Format000000,V.Local.sFilter)
+	F.Data.DataView.Create("Trueview","TimeCheck",22,v.Local.sFilter,"")
+	f.Intrinsic.Control.If(v.DataView.Trueview!TimeCheck.RowCount--,>,-1)
+		'The row already exists so we need to update it instead.
+		f.Data.DataTable.SetValue("Trueview",v.DataView.Trueview!TimeCheck(0).DataTableIndex,"DEPARTMENT",V.Local.sDepartment,"WORKCENTER",V.Passed.WC.Trim,"JOBSUFFIX",V.Local.sJobSuffix.Trim,"PART",V.Local.sPart.Trim,"SEQ",V.Passed.TXT-SEQ.Format000000,"DESCRIPTION",V.Local.sDescription.Trim,"EST_RATE",V.Local.fEst_Rate,"ACT_RATE",V.Local.fAct_Rate,"CURRENT_TIME",V.Local.fTime,"CURRENT_DATE",V.Ambient.Date,"AVG_RATE",V.Local.fAvg_Rate)
+	f.Intrinsic.Control.Else
+		'all of the old ones have been deleted so lets add in the new line
+		f.Data.DataTable.AddRow("Trueview","DEPARTMENT",V.Local.sDepartment,"WORKCENTER",V.Passed.WC.Trim,"JOBSUFFIX",V.Local.sJobSuffix.Trim,"PART",V.Local.sPart.Trim,"SEQ",V.Passed.TXT-SEQ.Format000000,"DESCRIPTION",V.Local.sDescription.Trim,"EST_RATE",V.Local.fEst_Rate,"ACT_RATE",V.Local.fAct_Rate,"CURRENT_TIME",V.Local.fTime,"CURRENT_DATE",V.Ambient.Date,"AVG_RATE",V.Local.fAvg_Rate)
+	f.Intrinsic.Control.EndIf
+	
+	'We deleted the old rows and added our new one
+	'Now we can save back to DB
+	f.Data.DataTable.SaveToDB("Trueview","Con","GCG_4231_TRUEVIEW","JOBSUFFIX*!*SEQ",7)
+	
+	F.Data.DataTable.Close("Trueview")
+	
+f.Intrinsic.Control.Else
+	f.Intrinsic.Control.CallSub(unload)
+f.Intrinsic.Control.EndIf
+
+
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("Hook50621_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_4231_TrueView_GUI_Process.g2u",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	f.Intrinsic.Control.CallSub(unload)
+Function.Intrinsic.Control.EndIf
+
+
+Program.Sub.Hook50621.End
+
+Program.Sub.Comments.Start
+${$0$}$$}$SS1$}$11/30/2016 2:58:40 PM$}$False
+${$3$}$0$}$$}$0$}$-1$}$$}$12:00:00 AM$}$From the Post Process Hook on the GUI the program will be called and it will calculate the Actual Rate for each job that it is updating and save it to a table. The TrueView Options Maintenance program ARC Project 4146 will be used to set up the options.
+${$5$}$2.0.0.0$}$2
+${$6$}$rrodriguez$}$20210423094717604$}$YnvOFTUOxTrnxbSzMvfBmnrP7dtKqN6ZKEdpzIv886rqWiTopkI1R9pGcGshyXBJguEYvPul+RSZwFBzlKOufA==
+Program.Sub.Comments.End
